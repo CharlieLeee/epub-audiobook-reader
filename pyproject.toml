@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["epub_audiobook_reader*"]
+
+[tool.setuptools.package-data]
+epub_audiobook_reader = ["*.html"]
+
+[project]
+name = "epub-audiobook-reader"
+version = "0.1.0"
+description = "Turn any EPUB into an audiobook with AI voice cloning, powered by Faster Qwen3-TTS"
+readme = "README.md"
+license = { text = "MIT" }
+keywords = ["tts", "epub", "audiobook", "qwen", "voice-cloning", "text-to-speech"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "faster-qwen3-tts>=0.2.3",
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.24.0",
+    "python-multipart>=0.0.7",
+    "ebooklib>=0.18",
+    "beautifulsoup4>=4.9",
+    "soundfile>=0.12",
+    "numpy>=1.24",
+    "torch>=2.1",
+]
+
+[project.scripts]
+epub-audiobook-reader = "epub_audiobook_reader.server:main"
+
+[project.urls]
+Repository = "https://github.com/williamcotton/epub-audiobook-reader"

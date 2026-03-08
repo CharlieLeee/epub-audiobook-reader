@@ -1,0 +1,1923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EPUB Audiobook Reader</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #09090b;
+  --surface: #18181b;
+  --surface2: #27272a;
+  --border: #27272a;
+  --border2: #3f3f46;
+  --text: #fafafa;
+  --text2: #a1a1aa;
+  --dim: #71717a;
+  --dimmer: #52525b;
+  --accent: #8b5cf6;
+  --accent2: #7c3aed;
+  --accent-bg: rgba(139,92,246,0.1);
+  --accent-ring: rgba(139,92,246,0.3);
+  --green: #22c55e;
+  --amber: #eab308;
+  --red: #ef4444;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+html.light {
+  --bg: #f8f9fa;
+  --surface: #ffffff;
+  --surface2: #f1f3f5;
+  --border: #dee2e6;
+  --border2: #ced4da;
+  --text: #212529;
+  --text2: #495057;
+  --dim: #868e96;
+  --dimmer: #adb5bd;
+  --accent: #7c3aed;
+  --accent2: #6d28d9;
+  --accent-bg: rgba(124,58,237,0.07);
+  --accent-ring: rgba(124,58,237,0.2);
+  --shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+html, body { height: 100%; margin: 0; overflow: hidden; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Top bar ── */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.topbar h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.3px; white-space: nowrap; }
+
+.ctrl-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+select, .btn, input[type="text"] {
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s;
+}
+select:focus, input[type="text"]:focus { border-color: var(--accent); }
+select { cursor: pointer; }
+input[type="text"] { min-width: 160px; }
+
+.btn {
+  cursor: pointer;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn:hover { border-color: var(--border2); }
+.btn-accent {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.btn-accent:hover { background: var(--accent2); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.status-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--dimmer);
+  flex-shrink: 0;
+}
+.status-dot.loaded { background: var(--green); }
+.status-dot.loading { background: var(--amber); animation: pulse 1s infinite; }
+
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+label.file-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text2);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+label.file-label:hover { border-color: var(--border2); }
+label.file-label input { display: none; }
+
+.ref-file-name {
+  font-size: 11px;
+  color: var(--dim);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Main layout ── */
+.main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+}
+.sidebar-header {
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--dim);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chapter-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.chapter-item {
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: background 0.15s, border-color 0.15s;
+  color: var(--text2);
+}
+.chapter-item:hover { background: var(--surface2); }
+.chapter-item.active {
+  background: var(--accent-bg);
+  border-left-color: var(--accent);
+  color: var(--text);
+}
+.chapter-item .ch-segs {
+  font-size: 10px;
+  color: var(--dimmer);
+  margin-top: 2px;
+}
+
+/* ── Content area ── */
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 32px;
+  scroll-behavior: smooth;
+}
+.content-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--dimmer);
+  font-size: 15px;
+}
+.segment {
+  padding: 8px 12px;
+  margin: 4px 0;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid transparent;
+  transition: background 0.3s, border-color 0.3s;
+  cursor: pointer;
+  line-height: 1.8;
+  font-size: 15px;
+  color: var(--text2);
+}
+.segment:hover { background: var(--surface2); }
+.segment.playing {
+  background: var(--accent-bg);
+  border-left-color: var(--accent);
+  color: var(--text);
+}
+.segment.played {
+  color: var(--dimmer);
+}
+
+/* ── Bottom bar ── */
+.bottombar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.play-controls {
+  display: flex;
+  gap: 6px;
+}
+.play-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+  font-size: 16px;
+}
+.play-btn:hover { border-color: var(--border2); background: var(--border); }
+.play-btn.primary { background: var(--accent); border-color: var(--accent); }
+.play-btn.primary:hover { background: var(--accent2); }
+.play-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.progress-info {
+  font-size: 12px;
+  color: var(--text2);
+}
+.progress-info .label { color: var(--dim); font-size: 11px; }
+
+.progress-bar-wrap {
+  flex: 1;
+  height: 4px;
+  background: var(--surface2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.progress-bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.3s;
+  width: 0%;
+}
+
+.gen-status {
+  font-size: 11px;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+/* ── Audiobook panel ── */
+.ab-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+}
+.ab-overlay.show { display: flex; }
+.ab-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px 28px;
+  width: 480px;
+  max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+.ab-panel h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+.ab-progress-wrap {
+  height: 8px;
+  background: var(--surface2);
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 12px 0;
+}
+.ab-progress-bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.3s;
+  width: 0%;
+}
+.ab-stats {
+  font-size: 12px;
+  color: var(--text2);
+  margin: 8px 0;
+  line-height: 1.8;
+}
+.ab-stats span { color: var(--text); font-weight: 500; }
+.ab-chapter {
+  font-size: 12px;
+  color: var(--dim);
+  margin-bottom: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ab-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+.ab-actions .btn { padding: 7px 16px; font-size: 13px; }
+.btn-green {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+.btn-green:hover { background: #16a34a; }
+.btn-red {
+  background: transparent;
+  border-color: var(--red);
+  color: var(--red);
+}
+.btn-red:hover { background: rgba(239,68,68,0.1); }
+
+.ab-chapter-select { margin-bottom: 12px; }
+.ab-ch-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.ab-ch-list {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.ab-ch-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text2);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.ab-ch-item:hover { background: var(--surface2); }
+.ab-ch-item input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.ab-ch-item .ab-ch-segs {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--dimmer);
+  white-space: nowrap;
+}
+
+/* ── Theme toggle ── */
+.theme-toggle {
+  --t-size: 26px;
+  --t-gap: 2px;
+  --t-pad: 3px;
+}
+.theme-toggle__track {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, var(--t-size));
+  gap: var(--t-gap);
+  padding: var(--t-pad);
+  border-radius: 100px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+}
+.theme-toggle__indicator {
+  position: absolute;
+  top: var(--t-pad);
+  left: var(--t-pad);
+  width: var(--t-size);
+  height: var(--t-size);
+  border-radius: 50%;
+  transform: translateX(calc(var(--t-idx, 0) * (var(--t-size) + var(--t-gap))));
+  background: var(--accent);
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 0;
+}
+.theme-toggle__btn {
+  height: var(--t-size);
+  width: var(--t-size);
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+  transition: color 0.2s;
+}
+.theme-toggle__btn:hover { color: var(--text2); }
+.theme-toggle__btn.active { color: #fff; }
+
+/* ── Library ── */
+.library-list {
+  padding: 4px 0;
+}
+.library-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: background 0.15s;
+  color: var(--text2);
+}
+.library-item:hover { background: var(--surface2); }
+.library-item.active {
+  background: var(--accent-bg);
+  border-left-color: var(--accent);
+  color: var(--text);
+}
+.library-item .lib-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.library-item .lib-del {
+  display: none;
+  font-size: 11px;
+  color: var(--dim);
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+.library-item:hover .lib-del { display: block; }
+.library-item .lib-del:hover { color: var(--red); }
+.lib-empty {
+  padding: 20px 12px;
+  color: var(--dimmer);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ── Voice manager modal ── */
+.vm-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.15s;
+}
+.vm-overlay.open { opacity: 1; pointer-events: auto; }
+.vm-modal {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 24px; width: 440px;
+  max-width: 92vw; max-height: 85vh; overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+.vm-modal h2 { font-size: 15px; font-weight: 600; margin-bottom: 16px; }
+.vm-tabs {
+  display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 16px;
+}
+.vm-tab {
+  padding: 8px 16px; font-size: 12px; font-weight: 500;
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--dim); cursor: pointer; transition: all 0.15s;
+}
+.vm-tab:hover { color: var(--text2); }
+.vm-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.vm-panel { display: none; }
+.vm-panel.active { display: block; }
+
+/* Voice list */
+.vm-voice-list { display: flex; flex-direction: column; gap: 2px; }
+.vm-voice-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: var(--radius-sm);
+  transition: background 0.15s;
+}
+.vm-voice-item:hover { background: var(--surface2); }
+.vm-voice-item .vm-v-name { flex: 1; font-size: 13px; }
+.vm-voice-item .vm-v-del {
+  font-size: 11px; color: var(--dim); cursor: pointer;
+  padding: 2px 6px; border-radius: 3px; transition: color 0.15s;
+  display: none;
+}
+.vm-voice-item:hover .vm-v-del { display: block; }
+.vm-voice-item .vm-v-del:hover { color: var(--red); }
+.vm-empty { padding: 16px; text-align: center; color: var(--dimmer); font-size: 13px; }
+
+/* Add voice form */
+.vm-field { margin-bottom: 12px; }
+.vm-field label { display: block; font-size: 11px; color: var(--dim); margin-bottom: 4px; font-weight: 500; }
+.vm-field input[type="text"],
+.vm-field textarea {
+  width: 100%; padding: 8px 10px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text);
+  font-size: 13px; font-family: inherit; outline: none;
+  transition: border-color 0.15s;
+}
+.vm-field input:focus, .vm-field textarea:focus { border-color: var(--accent-ring); }
+.vm-field textarea { resize: none; height: 48px; }
+
+/* Recording prompt card */
+.vm-prompt-card {
+  background: var(--accent-bg); border: 1px solid var(--accent-ring);
+  border-radius: var(--radius); padding: 16px;
+  margin-bottom: 12px; text-align: center;
+}
+.vm-prompt-card .vm-prompt-label {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--dim); margin-bottom: 8px;
+}
+.vm-prompt-card .vm-prompt-text {
+  font-size: 15px; line-height: 1.8; color: var(--text);
+}
+.vm-prompt-card .vm-prompt-hint {
+  font-size: 11px; color: var(--dim); margin-top: 8px;
+}
+
+/* Record button */
+.vm-rec-area {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  margin-bottom: 12px;
+}
+.vm-rec-btn {
+  width: 48px; height: 48px; border-radius: 50%;
+  border: 2px solid var(--border2); background: var(--surface2);
+  color: var(--text); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s; position: relative;
+}
+.vm-rec-btn:hover { border-color: var(--red); color: var(--red); }
+.vm-rec-btn.recording {
+  border-color: var(--red); color: var(--red);
+  animation: vm-pulse 1s infinite;
+}
+@keyframes vm-pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(239,68,68,0); }
+}
+.vm-rec-time {
+  font-size: 14px; font-family: 'SF Mono','Fira Code',monospace;
+  color: var(--text2); min-width: 40px; text-align: center;
+}
+.vm-rec-preview {
+  width: 100%; margin-bottom: 12px; display: none;
+  height: 32px; border-radius: var(--radius-sm);
+}
+
+/* Or-divider */
+.vm-or {
+  display: flex; align-items: center; gap: 10px;
+  color: var(--dimmer); font-size: 11px; margin-bottom: 12px;
+}
+.vm-or::before, .vm-or::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+
+.vm-file-label {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px; background: var(--surface2);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--text2); font-size: 12px; cursor: pointer;
+  transition: border-color 0.15s;
+}
+.vm-file-label:hover { border-color: var(--accent); color: var(--accent); }
+.vm-file-label input { display: none; }
+
+.vm-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
+.vm-actions button {
+  padding: 7px 16px; border-radius: var(--radius-sm);
+  font-size: 12px; font-weight: 500; cursor: pointer; border: none;
+  transition: all 0.15s;
+}
+.vm-cancel { background: var(--surface2); color: var(--text2); border: 1px solid var(--border) !important; }
+.vm-cancel:hover { border-color: var(--border2) !important; }
+.vm-submit { background: var(--accent); color: #fff; }
+.vm-submit:hover { background: var(--accent2); }
+.vm-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--dimmer); }
+</style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="topbar">
+  <h1>EPUB Audiobook Reader</h1>
+
+  <div class="theme-toggle">
+    <div class="theme-toggle__track" role="group" aria-label="Theme">
+      <span class="theme-toggle__indicator"></span>
+      <button data-theme="system" class="theme-toggle__btn active" title="System">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect width="18" height="12" x="3" y="4" rx="2"/><line x1="8" x2="16" y1="20" y2="20"/><line x1="12" x2="12" y1="16" y2="20"/></svg>
+      </button>
+      <button data-theme="light" class="theme-toggle__btn" title="Light">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      </button>
+      <button data-theme="dark" class="theme-toggle__btn" title="Dark">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div style="flex:1"></div>
+
+  <div class="ctrl-group">
+    <span class="status-dot" id="statusDot"></span>
+    <select id="modelSelect"></select>
+    <button class="btn btn-accent" id="loadBtn" onclick="loadModel()">Load</button>
+  </div>
+
+  <div class="ctrl-group">
+    <select id="modeSelect" onchange="onModeChange()">
+      <option value="voice_clone">Voice Clone</option>
+      <option value="custom">Custom Voice</option>
+    </select>
+  </div>
+
+  <!-- voice clone controls -->
+  <div class="ctrl-group" id="vcControls">
+    <select id="refPreset" onchange="onPresetChange()">
+      <option value="">-- Upload custom --</option>
+    </select>
+    <button class="btn" onclick="openVoiceManager()" title="Manage voices" style="padding:5px 8px">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+    </button>
+    <label class="file-label" id="refAudioLabel">
+      Ref Audio
+      <input type="file" id="refAudio" accept="audio/*" onchange="onRefAudioChange(this)">
+    </label>
+    <span class="ref-file-name" id="refFileName">No file</span>
+    <input type="text" id="refText" placeholder="Reference text (optional)" style="min-width:200px">
+  </div>
+
+  <!-- custom voice controls -->
+  <div class="ctrl-group" id="cvControls" style="display:none">
+    <select id="speakerSelect"></select>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <span id="sidebarTitle">Library</span>
+      <div style="flex:1"></div>
+      <button class="btn" style="padding:3px 8px;font-size:11px" id="backToLibBtn" onclick="showLibrary()" style="display:none">Library</button>
+      <label class="file-label" style="padding:3px 8px;font-size:11px">
+        Upload EPUB
+        <input type="file" id="epubFile" accept=".epub" onchange="uploadEpub(this)">
+      </label>
+    </div>
+    <div id="libraryView" class="library-list">
+      <div class="lib-empty">Upload an EPUB to get started</div>
+    </div>
+    <div class="chapter-list" id="chapterList" style="display:none">
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="content" id="contentArea">
+    <div class="content-placeholder">Upload an EPUB file and select a chapter</div>
+  </div>
+</div>
+
+<!-- Bottom bar -->
+<div class="bottombar">
+  <div class="play-controls">
+    <button class="play-btn primary" id="playBtn" onclick="togglePlay()" disabled title="Play">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+    </button>
+    <button class="play-btn" id="stopBtn" onclick="stopPlayback()" disabled title="Stop">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+    </button>
+  </div>
+
+  <div class="progress-bar-wrap">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+
+  <div class="progress-info">
+    <span id="segProgress">0 / 0</span>
+  </div>
+
+  <div class="gen-status" id="genStatus"></div>
+
+  <button class="btn btn-accent" id="abBtn" onclick="showAudiobookPanel()" disabled style="margin-left:auto">
+    Generate Audiobook
+  </button>
+</div>
+
+<!-- Audiobook generation overlay -->
+<div class="ab-overlay" id="abOverlay">
+  <div class="ab-panel">
+    <h2 id="abTitle">Generate Audiobook</h2>
+    <div class="ab-chapter-select" id="abChapterSelect">
+      <div class="ab-ch-header">
+        <label class="ab-ch-item" style="font-weight:600;color:var(--text)">
+          <input type="checkbox" id="abSelectAll" onchange="abToggleAll(this.checked)"> Select All
+        </label>
+        <span style="font-size:11px;color:var(--dim)" id="abSelSummary"></span>
+      </div>
+      <div class="ab-ch-list" id="abChList"></div>
+    </div>
+    <div class="ab-chapter" id="abChapter">&nbsp;</div>
+    <div class="ab-progress-wrap">
+      <div class="ab-progress-bar" id="abProgressBar"></div>
+    </div>
+    <div class="ab-stats" id="abStats" style="display:none">
+      <div>Progress: <span id="abPct">0%</span> &mdash; <span id="abSegCount">0 / 0</span> segments</div>
+      <div>Elapsed: <span id="abElapsed">0s</span> &mdash; Audio generated: <span id="abAudioDur">0s</span></div>
+    </div>
+    <div class="ab-actions">
+      <button class="btn btn-accent" id="abStartBtn" onclick="startAudiobook()">Start</button>
+      <button class="btn btn-red" id="abCancelBtn" onclick="cancelAudiobook()" style="display:none">Cancel</button>
+      <a class="btn btn-green" id="abDownloadBtn" href="/download_audiobook" download="audiobook.wav" style="display:none;text-decoration:none">Download WAV</a>
+      <div style="flex:1"></div>
+      <button class="btn" id="abCloseBtn" onclick="closeAudiobookPanel()">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Theme toggle ──
+(function() {
+  const saved = localStorage.getItem('epub-theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const isLight = saved === 'light' || (saved === 'system' && !prefersDark) || (!saved && !prefersDark);
+  if (isLight) document.documentElement.classList.add('light');
+})();
+</script>
+
+<script>
+// ── State ──
+let chapters = [];
+let currentChapter = -1;
+let currentSegment = 0;
+let isPlaying = false;
+let isGenerating = false;
+let abortController = null;
+let currentBookId = null;
+
+// Audio queue for gapless playback
+let audioContext = null;
+let audioQueue = [];       // ArrayBuffer queue for current segment
+let isAudioPlaying = false;
+let nextSourceStartTime = 0;
+let scheduledSources = [];
+
+function getAudioContext() {
+  if (!audioContext) audioContext = new AudioContext();
+  if (audioContext.state === 'suspended') audioContext.resume();
+  return audioContext;
+}
+
+// ── Theme toggle ──
+(function() {
+  const toggle = document.querySelector('.theme-toggle');
+  const track = toggle.querySelector('.theme-toggle__track');
+  const buttons = toggle.querySelectorAll('.theme-toggle__btn');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
+  const order = ['system', 'light', 'dark'];
+
+  function applyTheme(theme) {
+    const html = document.documentElement;
+    const isLight = theme === 'light' || (theme === 'system' && !prefersDark.matches);
+    html.classList.toggle('light', isLight);
+  }
+
+  function setActive(theme) {
+    const idx = Math.max(0, order.indexOf(theme));
+    track.style.setProperty('--t-idx', idx);
+    buttons.forEach(b => {
+      const on = b.dataset.theme === theme;
+      b.classList.toggle('active', on);
+    });
+  }
+
+  function switchTheme(theme) {
+    localStorage.setItem('epub-theme', theme);
+    setActive(theme);
+    applyTheme(theme);
+  }
+
+  const saved = localStorage.getItem('epub-theme') || 'system';
+  setActive(saved);
+
+  buttons.forEach(b => b.addEventListener('click', () => switchTheme(b.dataset.theme)));
+  prefersDark.addEventListener('change', () => {
+    if ((localStorage.getItem('epub-theme') || 'system') === 'system') applyTheme('system');
+  });
+})();
+
+// ── Library (IndexedDB) ──
+const LibDB = {
+  _db: null,
+  async open() {
+    if (this._db) return this._db;
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open('epub-library', 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains('books')) {
+          db.createObjectStore('books', { keyPath: 'id' });
+        }
+      };
+      req.onsuccess = () => { this._db = req.result; resolve(this._db); };
+      req.onerror = () => reject(req.error);
+    });
+  },
+  async list() {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('books', 'readonly');
+      const store = tx.objectStore('books');
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result.map(b => ({ id: b.id, title: b.title, addedAt: b.addedAt })));
+      req.onerror = () => reject(req.error);
+    });
+  },
+  async save(id, title, fileData) {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('books', 'readwrite');
+      const store = tx.objectStore('books');
+      store.put({ id, title, fileData, addedAt: Date.now() });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  },
+  async get(id) {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('books', 'readonly');
+      const req = tx.objectStore('books').get(id);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  },
+  async remove(id) {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('books', 'readwrite');
+      tx.objectStore('books').delete(id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+};
+
+async function renderLibrary() {
+  const view = document.getElementById('libraryView');
+  try {
+    const books = await LibDB.list();
+    books.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+    if (books.length === 0) {
+      view.innerHTML = '<div class="lib-empty">Upload an EPUB to get started</div>';
+      return;
+    }
+    view.innerHTML = '';
+    for (const b of books) {
+      const item = document.createElement('div');
+      item.className = 'library-item' + (b.id === currentBookId ? ' active' : '');
+      item.innerHTML = `<span class="lib-title">${escHtml(b.title)}</span><span class="lib-del" title="Remove">&times;</span>`;
+      item.querySelector('.lib-title').onclick = () => openBook(b.id);
+      item.querySelector('.lib-del').onclick = async (e) => {
+        e.stopPropagation();
+        if (!confirm('Remove "' + b.title + '" from library?')) return;
+        await LibDB.remove(b.id);
+        if (currentBookId === b.id) {
+          currentBookId = null;
+          chapters = [];
+          showLibrary();
+        }
+        renderLibrary();
+      };
+      view.appendChild(item);
+    }
+  } catch (e) {
+    view.innerHTML = '<div class="lib-empty">Library unavailable</div>';
+  }
+}
+
+function showLibrary() {
+  document.getElementById('libraryView').style.display = '';
+  document.getElementById('chapterList').style.display = 'none';
+  document.getElementById('sidebarTitle').textContent = 'Library';
+  document.getElementById('backToLibBtn').style.display = 'none';
+  document.getElementById('contentArea').innerHTML = '<div class="content-placeholder">Select a book or upload an EPUB</div>';
+  renderLibrary();
+}
+
+function showChapters() {
+  document.getElementById('libraryView').style.display = 'none';
+  document.getElementById('chapterList').style.display = '';
+  document.getElementById('sidebarTitle').textContent = 'Chapters';
+  document.getElementById('backToLibBtn').style.display = '';
+}
+
+async function openBook(bookId) {
+  const book = await LibDB.get(bookId);
+  if (!book) { alert('Book not found'); return; }
+
+  currentBookId = bookId;
+  renderLibrary();
+
+  const blob = new Blob([book.fileData]);
+  const file = new File([blob], book.title + '.epub', { type: 'application/epub+zip' });
+
+  const form = new FormData();
+  form.append('file', file);
+
+  document.getElementById('genStatus').textContent = 'Loading book...';
+
+  try {
+    const resp = await fetch('/upload', { method: 'POST', body: form });
+    if (!resp.ok) {
+      const err = await resp.json();
+      alert(err.detail || 'Failed to load book');
+      return;
+    }
+    const data = await resp.json();
+    chapters = data.chapters;
+    showChapters();
+    renderChapterList();
+    if (chapters.length > 0) selectChapter(0);
+    document.getElementById('genStatus').textContent = `Loaded ${chapters.length} chapters`;
+    document.getElementById('abBtn').disabled = false;
+  } catch (e) {
+    alert('Failed to load book: ' + e.message);
+  }
+}
+
+// ── Init ──
+async function init() {
+  const resp = await fetch('/status');
+  const data = await resp.json();
+
+  const sel = document.getElementById('modelSelect');
+  sel.innerHTML = '';
+  for (const m of data.available_models) {
+    const opt = document.createElement('option');
+    opt.value = m;
+    opt.textContent = m.split('/').pop();
+    sel.appendChild(opt);
+  }
+  if (data.model) {
+    sel.value = data.model;
+  }
+
+  updateStatusDot(data);
+  updateSpeakers(data.speakers || []);
+  updatePresets(data.preset_refs || []);
+  updateModeForModelType(data.model_type);
+}
+
+function updateStatusDot(data) {
+  const dot = document.getElementById('statusDot');
+  dot.className = 'status-dot';
+  if (data.loading) dot.classList.add('loading');
+  else if (data.loaded) dot.classList.add('loaded');
+}
+
+function updateSpeakers(speakers) {
+  const sel = document.getElementById('speakerSelect');
+  sel.innerHTML = '';
+  for (const s of speakers) {
+    const opt = document.createElement('option');
+    opt.value = s;
+    opt.textContent = s;
+    sel.appendChild(opt);
+  }
+}
+
+function updatePresets(presets) {
+  const sel = document.getElementById('refPreset');
+  // Keep the first "upload custom" option
+  while (sel.options.length > 1) sel.remove(1);
+  for (const p of presets) {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = p.label;
+    sel.appendChild(opt);
+  }
+  // Auto-select first preset if available
+  if (presets.length > 0) {
+    sel.value = presets[0].id;
+    onPresetChange();
+  }
+}
+
+function onPresetChange() {
+  const preset = document.getElementById('refPreset').value;
+  const isCustom = !preset;
+  document.getElementById('refAudioLabel').style.display = isCustom ? '' : 'none';
+  document.getElementById('refFileName').style.display = isCustom ? '' : 'none';
+}
+
+function updateModeForModelType(modelType) {
+  const modeSelect = document.getElementById('modeSelect');
+  const vcOpt = modeSelect.querySelector('option[value="voice_clone"]');
+  const cvOpt = modeSelect.querySelector('option[value="custom"]');
+
+  if (modelType === 'custom_voice') {
+    // CustomVoice model: only custom mode
+    vcOpt.disabled = true;
+    cvOpt.disabled = false;
+    modeSelect.value = 'custom';
+  } else {
+    // Base model: only voice_clone mode
+    vcOpt.disabled = false;
+    cvOpt.disabled = true;
+    modeSelect.value = 'voice_clone';
+  }
+  onModeChange();
+}
+
+function onModeChange() {
+  const mode = document.getElementById('modeSelect').value;
+  document.getElementById('vcControls').style.display = mode === 'voice_clone' ? 'flex' : 'none';
+  document.getElementById('cvControls').style.display = mode === 'custom' ? 'flex' : 'none';
+}
+
+function onRefAudioChange(input) {
+  const name = input.files[0]?.name || 'No file';
+  document.getElementById('refFileName').textContent = name;
+}
+
+// ── Model loading ──
+async function loadModel() {
+  const btn = document.getElementById('loadBtn');
+  const modelId = document.getElementById('modelSelect').value;
+  btn.disabled = true;
+  btn.textContent = 'Loading...';
+  document.getElementById('statusDot').className = 'status-dot loading';
+
+  try {
+    const form = new FormData();
+    form.append('model_id', modelId);
+    const resp = await fetch('/load', { method: 'POST', body: form });
+    const data = await resp.json();
+    if (resp.ok) {
+      document.getElementById('statusDot').className = 'status-dot loaded';
+      // Refresh status for speakers
+      const status = await (await fetch('/status')).json();
+      updateSpeakers(status.speakers || []);
+      updatePresets(status.preset_refs || []);
+      updateModeForModelType(status.model_type);
+    }
+  } catch (e) {
+    alert('Failed to load model: ' + e.message);
+    document.getElementById('statusDot').className = 'status-dot';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Load';
+  }
+}
+
+// ── EPUB upload ──
+async function uploadEpub(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const form = new FormData();
+  form.append('file', file);
+
+  document.getElementById('genStatus').textContent = 'Parsing EPUB...';
+
+  try {
+    const resp = await fetch('/upload', { method: 'POST', body: form });
+    if (!resp.ok) {
+      const err = await resp.json();
+      alert(err.detail || 'Upload failed');
+      return;
+    }
+    const data = await resp.json();
+    chapters = data.chapters;
+
+    // Save to library
+    const bookTitle = file.name.replace(/\.epub$/i, '');
+    const bookId = bookTitle.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    const arrayBuf = await file.arrayBuffer();
+    try {
+      await LibDB.save(bookId, bookTitle, arrayBuf);
+      currentBookId = bookId;
+    } catch (e) { console.warn('Failed to save to library:', e); }
+
+    showChapters();
+    renderChapterList();
+    if (chapters.length > 0) selectChapter(0);
+    document.getElementById('genStatus').textContent = `Loaded ${chapters.length} chapters`;
+    document.getElementById('abBtn').disabled = false;
+  } catch (e) {
+    alert('Upload failed: ' + e.message);
+  }
+}
+
+function renderChapterList() {
+  const list = document.getElementById('chapterList');
+  list.innerHTML = '';
+  for (let i = 0; i < chapters.length; i++) {
+    const ch = chapters[i];
+    const div = document.createElement('div');
+    div.className = 'chapter-item' + (i === currentChapter ? ' active' : '');
+    div.innerHTML = `<div>${escHtml(ch.title)}</div><div class="ch-segs">${ch.segment_count} segments</div>`;
+    div.onclick = () => selectChapter(i);
+    list.appendChild(div);
+  }
+}
+
+function selectChapter(idx) {
+  if (isPlaying) stopPlayback();
+  currentChapter = idx;
+  currentSegment = 0;
+
+  // Update sidebar
+  document.querySelectorAll('.chapter-item').forEach((el, i) => {
+    el.classList.toggle('active', i === idx);
+  });
+
+  // Render segments
+  const area = document.getElementById('contentArea');
+  const ch = chapters[idx];
+  area.innerHTML = '';
+  for (let i = 0; i < ch.segments.length; i++) {
+    const text = ch.segments[i];
+    if (text === '__PAUSE__') {
+      // Render as a visual spacer, not clickable
+      const spacer = document.createElement('div');
+      spacer.id = 'seg-' + i;
+      spacer.style.height = '16px';
+      area.appendChild(spacer);
+      continue;
+    }
+    const div = document.createElement('div');
+    div.className = 'segment';
+    div.id = 'seg-' + i;
+    div.textContent = text;
+    div.onclick = () => {
+      currentSegment = i;
+      if (!isPlaying) togglePlay();
+      else {
+        stopPlayback();
+        currentSegment = i;
+        togglePlay();
+      }
+    };
+    area.appendChild(div);
+  }
+
+  updateProgress();
+  document.getElementById('playBtn').disabled = false;
+}
+
+// ── Playback ──
+function togglePlay() {
+  if (isPlaying) {
+    pausePlayback();
+  } else {
+    startPlayback();
+  }
+}
+
+function startPlayback() {
+  if (currentChapter < 0 || !chapters.length) return;
+  isPlaying = true;
+  updatePlayBtn();
+  generateAndPlaySegment(currentChapter, currentSegment);
+}
+
+function pausePlayback() {
+  isPlaying = false;
+  // Tell backend to stop GPU inference immediately
+  fetch('/cancel_chapter', { method: 'POST' }).catch(() => {});
+  if (abortController) abortController.abort();
+  cancelScheduledAudio();
+  stopHighlightTracker();
+  updatePlayBtn();
+}
+
+function stopPlayback() {
+  isPlaying = false;
+  // Tell backend to stop GPU inference immediately
+  fetch('/cancel_chapter', { method: 'POST' }).catch(() => {});
+  if (abortController) abortController.abort();
+  cancelScheduledAudio();
+  stopHighlightTracker();
+  currentSegment = 0;
+  updatePlayBtn();
+  updateProgress();
+  // Clear highlights
+  document.querySelectorAll('.segment').forEach(el => {
+    el.classList.remove('playing', 'played');
+  });
+  document.getElementById('genStatus').textContent = '';
+}
+
+function cancelScheduledAudio() {
+  for (const src of scheduledSources) {
+    try { src.stop(); } catch(e) {}
+  }
+  scheduledSources = [];
+  audioQueue = [];
+  isAudioPlaying = false;
+  nextSourceStartTime = 0;
+}
+
+function updatePlayBtn() {
+  const btn = document.getElementById('playBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  if (isPlaying) {
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="3" width="5" height="18" rx="1"/><rect x="14" y="3" width="5" height="18" rx="1"/></svg>';
+    btn.title = 'Pause';
+  } else {
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>';
+    btn.title = 'Play';
+  }
+  stopBtn.disabled = !isPlaying && currentSegment === 0;
+}
+
+function updateProgress() {
+  if (currentChapter < 0) return;
+  const ch = chapters[currentChapter];
+  const total = ch.segment_count;
+  document.getElementById('segProgress').textContent = `${currentSegment + 1} / ${total}`;
+  const pct = total > 0 ? ((currentSegment) / total * 100) : 0;
+  document.getElementById('progressBar').style.width = pct + '%';
+}
+
+function highlightSegment(idx) {
+  document.querySelectorAll('.segment').forEach((el, i) => {
+    el.classList.remove('playing');
+    if (i < idx) el.classList.add('played');
+    else el.classList.remove('played');
+  });
+  const el = document.getElementById('seg-' + idx);
+  if (el) {
+    el.classList.add('playing');
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+// ── Audio generation & playback via SSE ──
+// Single request streams entire chapter — GPU never idles between segments.
+// Audio chunks are scheduled on a continuous Web Audio timeline for gapless playback.
+
+let segmentEndTimes = []; // [{segIdx, endTime}] for highlight tracking
+let highlightTimer = null;
+
+function startHighlightTracker() {
+  if (highlightTimer) return;
+  highlightTimer = setInterval(() => {
+    if (!audioContext || !isPlaying || segmentEndTimes.length === 0) return;
+    const now = audioContext.currentTime;
+    // Find which segment is currently playing
+    let activeSeg = segmentEndTimes[0].segIdx;
+    for (let i = 0; i < segmentEndTimes.length; i++) {
+      if (now < segmentEndTimes[i].endTime) {
+        activeSeg = segmentEndTimes[i].segIdx;
+        break;
+      }
+      if (i === segmentEndTimes.length - 1) {
+        activeSeg = segmentEndTimes[i].segIdx;
+      }
+    }
+    if (currentSegment !== activeSeg) {
+      currentSegment = activeSeg;
+      updateProgress();
+      highlightSegment(activeSeg);
+    }
+  }, 100);
+}
+
+function stopHighlightTracker() {
+  if (highlightTimer) { clearInterval(highlightTimer); highlightTimer = null; }
+  segmentEndTimes = [];
+}
+
+async function generateAndPlaySegment(chapterIdx, startSegIdx) {
+  if (!isPlaying) return;
+
+  const ch = chapters[chapterIdx];
+  abortController = new AbortController();
+  cancelScheduledAudio();
+  stopHighlightTracker();
+
+  currentSegment = startSegIdx;
+  updateProgress();
+  highlightSegment(startSegIdx);
+  startHighlightTracker();
+
+  const form = new FormData();
+  form.append('chapter_index', chapterIdx);
+  form.append('start_segment', startSegIdx);
+  form.append('mode', document.getElementById('modeSelect').value);
+
+  const mode = document.getElementById('modeSelect').value;
+  if (mode === 'voice_clone') {
+    const refPreset = document.getElementById('refPreset').value;
+    if (refPreset) {
+      form.append('ref_preset', refPreset);
+    } else {
+      const refFile = document.getElementById('refAudio').files[0];
+      if (refFile) form.append('ref_audio', refFile);
+    }
+    form.append('ref_text', document.getElementById('refText').value);
+  } else if (mode === 'custom') {
+    form.append('speaker', document.getElementById('speakerSelect').value);
+  }
+
+  try {
+    const resp = await fetch('/generate_chapter', {
+      method: 'POST',
+      body: form,
+      signal: abortController.signal,
+    });
+
+    if (!resp.ok) {
+      let msg = `HTTP ${resp.status}`;
+      try { const err = await resp.json(); msg = err.detail || msg; } catch(e) {}
+      document.getElementById('genStatus').textContent = 'Error: ' + msg;
+      isPlaying = false;
+      updatePlayBtn();
+      stopHighlightTracker();
+      return;
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    const ctx = getAudioContext();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = JSON.parse(line.slice(6));
+
+        if (data.type === 'segment_start') {
+          document.getElementById('genStatus').textContent =
+            `Generating seg ${data.segment_index + 1}/${data.total_segments}...`;
+        } else if (data.type === 'chunk') {
+          const raw = atob(data.audio_b64);
+          const arr = new Uint8Array(raw.length);
+          for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+          const audioBuffer = await ctx.decodeAudioData(arr.buffer.slice(0));
+          scheduleAudioBuffer(ctx, audioBuffer);
+        } else if (data.type === 'segment_done') {
+          // Record when this segment's audio ends in the timeline
+          segmentEndTimes.push({ segIdx: data.segment_index, endTime: nextSourceStartTime });
+        } else if (data.type === 'done') {
+          document.getElementById('genStatus').textContent =
+            `Chapter done: ${data.total_audio_s}s audio in ${(data.total_ms / 1000).toFixed(1)}s`;
+        } else if (data.type === 'error') {
+          document.getElementById('genStatus').textContent = 'Error: ' + data.message;
+          isPlaying = false;
+          updatePlayBtn();
+          stopHighlightTracker();
+          return;
+        }
+      }
+    }
+
+    // Wait for all audio to finish playing
+    await waitForAudioDone();
+
+    if (isPlaying) {
+      isPlaying = false;
+      updatePlayBtn();
+      stopHighlightTracker();
+      document.getElementById('genStatus').textContent = 'Chapter finished';
+    }
+
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    console.error(e);
+    document.getElementById('genStatus').textContent = 'Error: ' + e.message;
+    isPlaying = false;
+    updatePlayBtn();
+    stopHighlightTracker();
+  }
+}
+
+function scheduleAudioBuffer(ctx, audioBuffer) {
+  const source = ctx.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(ctx.destination);
+
+  const now = ctx.currentTime;
+  const startAt = Math.max(now, nextSourceStartTime);
+  source.start(startAt);
+  nextSourceStartTime = startAt + audioBuffer.duration;
+
+  scheduledSources.push(source);
+  source.onended = () => {
+    const idx = scheduledSources.indexOf(source);
+    if (idx >= 0) scheduledSources.splice(idx, 1);
+  };
+}
+
+function waitForAudioDone() {
+  return new Promise(resolve => {
+    function check() {
+      const ctx = audioContext;
+      if (!ctx || scheduledSources.length === 0) {
+        // Small delay to ensure last buffer finishes
+        if (ctx && ctx.currentTime < nextSourceStartTime) {
+          const remaining = (nextSourceStartTime - ctx.currentTime) * 1000;
+          setTimeout(resolve, Math.min(remaining + 50, 30000));
+        } else {
+          resolve();
+        }
+        return;
+      }
+      setTimeout(check, 100);
+    }
+    check();
+  });
+}
+
+// ── Util ──
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// ── Audiobook generation ──
+let abGenerating = false;
+let abAbort = null;
+
+function showAudiobookPanel() {
+  if (!chapters.length) return;
+  document.getElementById('abOverlay').classList.add('show');
+  document.getElementById('abTitle').textContent = 'Generate Audiobook';
+  document.getElementById('abChapter').innerHTML = '&nbsp;';
+  document.getElementById('abProgressBar').style.width = '0%';
+  document.getElementById('abStats').style.display = 'none';
+  document.getElementById('abStartBtn').style.display = '';
+  document.getElementById('abStartBtn').disabled = false;
+  document.getElementById('abCancelBtn').style.display = 'none';
+  document.getElementById('abDownloadBtn').style.display = 'none';
+  document.getElementById('abCloseBtn').disabled = false;
+  document.getElementById('abChapterSelect').style.display = '';
+
+  // Render chapter checkboxes
+  const list = document.getElementById('abChList');
+  list.innerHTML = '';
+  for (let i = 0; i < chapters.length; i++) {
+    const ch = chapters[i];
+    const label = document.createElement('label');
+    label.className = 'ab-ch-item';
+    label.innerHTML = `<input type="checkbox" checked data-ch="${i}" onchange="abUpdateSummary()">` +
+      `<span>${escHtml(ch.title)}</span>` +
+      `<span class="ab-ch-segs">${ch.segment_count} segs</span>`;
+    list.appendChild(label);
+  }
+  document.getElementById('abSelectAll').checked = true;
+  abUpdateSummary();
+}
+
+function abToggleAll(checked) {
+  document.querySelectorAll('#abChList input[type="checkbox"]').forEach(cb => cb.checked = checked);
+  abUpdateSummary();
+}
+
+function abUpdateSummary() {
+  const cbs = document.querySelectorAll('#abChList input[type="checkbox"]');
+  let selCh = 0, selSegs = 0;
+  cbs.forEach(cb => {
+    if (cb.checked) {
+      selCh++;
+      selSegs += chapters[parseInt(cb.dataset.ch)].segment_count;
+    }
+  });
+  document.getElementById('abSelSummary').textContent = `${selCh} chapters, ${selSegs} segments`;
+  document.getElementById('abSelectAll').checked = selCh === chapters.length;
+  document.getElementById('abStartBtn').disabled = selCh === 0;
+}
+
+function getSelectedChapterIndices() {
+  const indices = [];
+  document.querySelectorAll('#abChList input[type="checkbox"]').forEach(cb => {
+    if (cb.checked) indices.push(parseInt(cb.dataset.ch));
+  });
+  return indices;
+}
+
+function closeAudiobookPanel() {
+  if (abGenerating) return; // must cancel first
+  document.getElementById('abOverlay').classList.remove('show');
+}
+
+async function startAudiobook() {
+  const selectedChapters = getSelectedChapterIndices();
+  if (selectedChapters.length === 0) return;
+
+  abGenerating = true;
+  document.getElementById('abStartBtn').style.display = 'none';
+  document.getElementById('abCancelBtn').style.display = '';
+  document.getElementById('abDownloadBtn').style.display = 'none';
+  document.getElementById('abCloseBtn').disabled = true;
+  document.getElementById('abChapterSelect').style.display = 'none';
+  document.getElementById('abStats').style.display = '';
+
+  const selSegs = selectedChapters.reduce((s, i) => s + chapters[i].segment_count, 0);
+  document.getElementById('abPct').textContent = '0%';
+  document.getElementById('abSegCount').textContent = `0 / ${selSegs}`;
+  document.getElementById('abElapsed').textContent = '0s';
+  document.getElementById('abAudioDur').textContent = '0s';
+
+  const form = new FormData();
+  form.append('mode', document.getElementById('modeSelect').value);
+  form.append('chapter_indices', JSON.stringify(selectedChapters));
+
+  const mode = document.getElementById('modeSelect').value;
+  if (mode === 'voice_clone') {
+    const refPreset = document.getElementById('refPreset').value;
+    if (refPreset) {
+      form.append('ref_preset', refPreset);
+    } else {
+      const refFile = document.getElementById('refAudio').files[0];
+      if (refFile) form.append('ref_audio', refFile);
+    }
+    form.append('ref_text', document.getElementById('refText').value);
+  } else if (mode === 'custom') {
+    form.append('speaker', document.getElementById('speakerSelect').value);
+  }
+
+  abAbort = new AbortController();
+
+  try {
+    const resp = await fetch('/generate_audiobook', {
+      method: 'POST',
+      body: form,
+      signal: abAbort.signal,
+    });
+
+    if (!resp.ok) {
+      let msg = `HTTP ${resp.status}`;
+      try { const err = await resp.json(); msg = err.detail || msg; } catch(e) {}
+      alert('Error: ' + msg);
+      abDone();
+      return;
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = JSON.parse(line.slice(6));
+
+        if (data.type === 'progress') {
+          document.getElementById('abProgressBar').style.width = data.pct + '%';
+          document.getElementById('abPct').textContent = data.pct + '%';
+          document.getElementById('abSegCount').textContent = `${data.segment} / ${data.total}`;
+          document.getElementById('abElapsed').textContent = data.elapsed_s + 's';
+          document.getElementById('abAudioDur').textContent = data.audio_s + 's';
+          document.getElementById('abChapter').textContent = `Chapter ${data.chapter + 1}: ${data.chapter_title}`;
+        } else if (data.type === 'done') {
+          document.getElementById('abProgressBar').style.width = '100%';
+          document.getElementById('abPct').textContent = '100%';
+          document.getElementById('abTitle').textContent = 'Audiobook Ready';
+          document.getElementById('abChapter').textContent =
+            `Total: ${data.total_audio_s}s audio, generated in ${(data.total_ms / 1000).toFixed(1)}s`;
+          document.getElementById('abDownloadBtn').style.display = '';
+          abDone();
+        } else if (data.type === 'cancelled') {
+          document.getElementById('abTitle').textContent = 'Generation Cancelled';
+          abDone();
+        } else if (data.type === 'error') {
+          document.getElementById('abTitle').textContent = 'Error';
+          document.getElementById('abChapter').textContent = data.message;
+          abDone();
+        }
+      }
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      document.getElementById('abTitle').textContent = 'Generation Cancelled';
+    } else {
+      document.getElementById('abTitle').textContent = 'Error';
+      document.getElementById('abChapter').textContent = e.message;
+    }
+    abDone();
+  }
+}
+
+function abDone() {
+  abGenerating = false;
+  document.getElementById('abCancelBtn').style.display = 'none';
+  document.getElementById('abStartBtn').style.display = '';
+  document.getElementById('abStartBtn').disabled = false;
+  document.getElementById('abCloseBtn').disabled = false;
+}
+
+async function cancelAudiobook() {
+  try {
+    await fetch('/cancel_audiobook', { method: 'POST' });
+  } catch(e) {}
+  if (abAbort) abAbort.abort();
+}
+
+// ── Voice Manager ──────────────────────────────────────────────────────────────
+const VM_PROMPTS = [
+  { text: "The quick brown fox jumps over the lazy dog. She sells seashells by the seashore, while the waves crash gently against the rocks.", lang: "English" },
+  { text: "在一个阳光明媚的早晨，小明背着书包走出家门，微风吹过树梢，鸟儿在枝头欢快地歌唱。他深吸一口气，感受着春天的气息，心情格外愉悦。", lang: "Chinese" },
+  { text: "The rain in Spain stays mainly in the plain. How kind of you to let me come. I'd like a cup of tea with milk and sugar, please.", lang: "English" },
+  { text: "秋天的落叶铺满了林间小道，远处的山峦在夕阳的余晖中显得格外壮美。老人坐在长椅上，翻开一本泛黄的书，安静地阅读着。", lang: "Chinese" },
+];
+let vmRecorder = null;
+let vmRecording = false;
+let vmRecBlob = null;
+let vmRecTimer = null;
+let vmRecStart = 0;
+let vmPromptIdx = Math.floor(Math.random() * VM_PROMPTS.length);
+
+function openVoiceManager() {
+  document.getElementById('vmOverlay').classList.add('open');
+  vmShowTab('list');
+  vmRenderVoiceList();
+}
+
+function closeVoiceManager() {
+  vmStopRecording();
+  document.getElementById('vmOverlay').classList.remove('open');
+}
+
+function vmShowTab(tab) {
+  document.querySelectorAll('.vm-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.querySelectorAll('.vm-panel').forEach(p => p.classList.toggle('active', p.id === 'vmPanel-' + tab));
+  if (tab === 'add') vmResetAddForm();
+}
+
+function vmRenderVoiceList() {
+  const list = document.getElementById('vmVoiceList');
+  // Get from the preset dropdown
+  const sel = document.getElementById('refPreset');
+  const voices = [];
+  for (let i = 1; i < sel.options.length; i++) {
+    voices.push({ id: sel.options[i].value, label: sel.options[i].textContent });
+  }
+  if (voices.length === 0) {
+    list.innerHTML = '<div class="vm-empty">No voices yet. Add one to get started.</div>';
+    return;
+  }
+  list.innerHTML = '';
+  for (const v of voices) {
+    const item = document.createElement('div');
+    item.className = 'vm-voice-item';
+    item.innerHTML = `<span class="vm-v-name">${escHtml(v.label)}</span><span class="vm-v-del" title="Remove">&times;</span>`;
+    item.querySelector('.vm-v-del').onclick = () => vmDeleteVoice(v.id, v.label);
+    list.appendChild(item);
+  }
+}
+
+async function vmDeleteVoice(id, label) {
+  if (!confirm('Remove voice "' + label + '"?')) return;
+  try {
+    await fetch('/custom_voice/' + encodeURIComponent(id), { method: 'DELETE' });
+    // Refresh presets
+    const status = await (await fetch('/status')).json();
+    updatePresets(status.preset_refs || []);
+    vmRenderVoiceList();
+  } catch (e) {
+    alert('Failed to remove: ' + e.message);
+  }
+}
+
+function vmResetAddForm() {
+  vmRecBlob = null;
+  vmRecording = false;
+  document.getElementById('vmAddName').value = '';
+  document.getElementById('vmAddTranscript').value = '';
+  document.getElementById('vmRecPreview').style.display = 'none';
+  document.getElementById('vmRecTime').textContent = '0:00';
+  document.getElementById('vmRecBtn').classList.remove('recording');
+  document.getElementById('vmAddFileInput').value = '';
+  document.getElementById('vmAddFileName').textContent = 'Upload audio file';
+  document.getElementById('vmAddSubmit').disabled = true;
+  // Set prompt
+  vmPromptIdx = Math.floor(Math.random() * VM_PROMPTS.length);
+  const prompt = VM_PROMPTS[vmPromptIdx];
+  document.getElementById('vmPromptText').textContent = prompt.text;
+  document.getElementById('vmAddTranscript').value = prompt.text;
+  vmValidateAdd();
+}
+
+function vmShufflePrompt() {
+  vmPromptIdx = (vmPromptIdx + 1) % VM_PROMPTS.length;
+  const prompt = VM_PROMPTS[vmPromptIdx];
+  document.getElementById('vmPromptText').textContent = prompt.text;
+  document.getElementById('vmAddTranscript').value = prompt.text;
+}
+
+function vmValidateAdd() {
+  const name = document.getElementById('vmAddName').value.trim();
+  const hasAudio = vmRecBlob || (document.getElementById('vmAddFileInput').files && document.getElementById('vmAddFileInput').files[0]);
+  document.getElementById('vmAddSubmit').disabled = !(name && hasAudio);
+}
+
+async function vmToggleRecording() {
+  if (vmRecording) {
+    vmStopRecording();
+    return;
+  }
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert('Recording requires HTTPS. Please access this page via HTTPS or localhost.');
+      return;
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    vmRecBlob = null;
+    const chunks = [];
+    vmRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+    vmRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+    vmRecorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      vmRecBlob = new Blob(chunks, { type: 'audio/webm' });
+      const preview = document.getElementById('vmRecPreview');
+      if (preview.src) URL.revokeObjectURL(preview.src);
+      preview.src = URL.createObjectURL(vmRecBlob);
+      preview.style.display = 'block';
+      vmValidateAdd();
+    };
+    vmRecorder.start();
+    vmRecording = true;
+    vmRecStart = Date.now();
+    document.getElementById('vmRecBtn').classList.add('recording');
+    document.getElementById('vmRecTime').textContent = '0:00';
+    vmRecTimer = setInterval(() => {
+      const s = Math.floor((Date.now() - vmRecStart) / 1000);
+      document.getElementById('vmRecTime').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+    }, 200);
+  } catch (e) {
+    alert('Microphone access denied: ' + e.message);
+  }
+}
+
+function vmStopRecording() {
+  if (vmRecorder && vmRecorder.state === 'recording') vmRecorder.stop();
+  vmRecording = false;
+  document.getElementById('vmRecBtn').classList.remove('recording');
+  if (vmRecTimer) { clearInterval(vmRecTimer); vmRecTimer = null; }
+}
+
+function vmPickFile(input) {
+  if (input.files && input.files[0]) {
+    document.getElementById('vmAddFileName').textContent = input.files[0].name;
+    vmRecBlob = null; // prefer uploaded file over recording
+    vmValidateAdd();
+  }
+}
+
+async function vmSubmitVoice() {
+  const name = document.getElementById('vmAddName').value.trim();
+  const transcript = document.getElementById('vmAddTranscript').value.trim();
+  const fileInput = document.getElementById('vmAddFileInput');
+  const audioFile = (fileInput.files && fileInput.files[0]) ? fileInput.files[0] : null;
+  const audio = audioFile || vmRecBlob;
+  if (!name || !audio) return;
+
+  const btn = document.getElementById('vmAddSubmit');
+  btn.disabled = true;
+  btn.textContent = 'Adding...';
+
+  try {
+    const fd = new FormData();
+    fd.append('label', name);
+    fd.append('ref_text', transcript);
+    fd.append('ref_audio', audio, audioFile ? audioFile.name : 'recording.webm');
+    const res = await fetch('/custom_voice', { method: 'POST', body: fd });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to add voice');
+    }
+    const d = await res.json();
+    // Refresh presets
+    const status = await (await fetch('/status')).json();
+    updatePresets(status.preset_refs || []);
+    // Select the new voice
+    document.getElementById('refPreset').value = d.id;
+    onPresetChange();
+    // Switch to list tab
+    vmShowTab('list');
+    vmRenderVoiceList();
+  } catch (e) {
+    alert(e.message || 'Failed to add voice');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Add Voice';
+  }
+}
+
+// ── Boot ──
+init();
+renderLibrary();
+</script>
+
+<!-- Voice manager modal -->
+<div class="vm-overlay" id="vmOverlay" onclick="if(event.target===this)closeVoiceManager()">
+  <div class="vm-modal">
+    <h2>Voice Manager</h2>
+    <div class="vm-tabs">
+      <button class="vm-tab active" data-tab="list" onclick="vmShowTab('list');vmRenderVoiceList()">My Voices</button>
+      <button class="vm-tab" data-tab="add" onclick="vmShowTab('add')">Add Voice</button>
+    </div>
+
+    <!-- List panel -->
+    <div class="vm-panel active" id="vmPanel-list">
+      <div class="vm-voice-list" id="vmVoiceList"></div>
+    </div>
+
+    <!-- Add panel -->
+    <div class="vm-panel" id="vmPanel-add">
+      <div class="vm-field">
+        <label>Voice Name</label>
+        <input type="text" id="vmAddName" placeholder="e.g. My Voice" oninput="vmValidateAdd()">
+      </div>
+
+      <div class="vm-prompt-card">
+        <div class="vm-prompt-label">Read this text aloud <button class="btn" onclick="vmShufflePrompt()" style="padding:1px 6px;font-size:10px;margin-left:6px">Shuffle</button></div>
+        <div class="vm-prompt-text" id="vmPromptText"></div>
+        <div class="vm-prompt-hint">Read naturally at your normal speaking pace</div>
+      </div>
+
+      <div class="vm-rec-area">
+        <button class="vm-rec-btn" id="vmRecBtn" onclick="vmToggleRecording()" title="Record">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>
+        </button>
+        <span class="vm-rec-time" id="vmRecTime">0:00</span>
+      </div>
+      <audio id="vmRecPreview" class="vm-rec-preview" controls></audio>
+
+      <div class="vm-or">or</div>
+
+      <div class="vm-field">
+        <label class="vm-file-label">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+          <span id="vmAddFileName">Upload audio file</span>
+          <input type="file" id="vmAddFileInput" accept=".wav,.mp3,.flac,.ogg,.webm" onchange="vmPickFile(this)">
+        </label>
+      </div>
+
+      <div class="vm-field">
+        <label>Transcript (auto-filled from prompt above)</label>
+        <textarea id="vmAddTranscript" placeholder="Transcript of the reference audio..."></textarea>
+      </div>
+
+      <div class="vm-actions">
+        <button class="vm-cancel" onclick="closeVoiceManager()">Cancel</button>
+        <button class="vm-submit" id="vmAddSubmit" onclick="vmSubmitVoice()" disabled>Add Voice</button>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
