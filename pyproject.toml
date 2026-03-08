@@ -45,3 +45,4 @@ epub-audiobook-reader = "epub_audiobook_reader.server:main"
 
 [project.urls]
 Repository = "https://github.com/williamcotton/epub-audiobook-reader"
+

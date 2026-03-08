@@ -23,15 +23,15 @@ Turn any EPUB into an audiobook with AI voice cloning. Powered by [Faster Qwen3-
 ## Installation
 
 ```bash
-pip install epub-audiobook-reader
-```
-
-Or install from source:
-
-```bash
 git clone https://github.com/williamcotton/epub-audiobook-reader.git
 cd epub-audiobook-reader
-pip install -e .
+
+# Install PyTorch for your CUDA version first (see https://pytorch.org/get-started/locally/)
+# Example for CUDA 12.8 (RTX 50-series):
+uv pip install torch --index-url https://download.pytorch.org/whl/cu128
+
+# Then install the project
+uv sync
 ```
 
 ## Quick Start
