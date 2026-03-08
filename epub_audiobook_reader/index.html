@@ -1157,8 +1157,8 @@ function renderChapterList() {
   }
 }
 
-function selectChapter(idx) {
-  if (isPlaying) stopPlayback();
+async function selectChapter(idx) {
+  if (isPlaying) await stopPlayback();
   currentChapter = idx;
   currentSegment = 0;
 
@@ -1185,13 +1185,14 @@ function selectChapter(idx) {
     div.className = 'segment';
     div.id = 'seg-' + i;
     div.textContent = text;
-    div.onclick = () => {
+    div.onclick = async () => {
       currentSegment = i;
-      if (!isPlaying) togglePlay();
-      else {
-        stopPlayback();
+      if (!isPlaying) {
+        await togglePlay();
+      } else {
+        await stopPlayback();
         currentSegment = i;
-        togglePlay();
+        await togglePlay();
       }
     };
     area.appendChild(div);
@@ -1202,41 +1203,68 @@ function selectChapter(idx) {
 }
 
 // ── Playback ──
-function togglePlay() {
+async function togglePlay() {
   if (isPlaying) {
-    pausePlayback();
+    await pausePlayback();
   } else {
-    startPlayback();
+    await startPlayback();
   }
 }
 
-function startPlayback() {
+async function startPlayback() {
   if (currentChapter < 0 || !chapters.length) return;
+
+  // Cancel any ongoing audiobook generation (both use the same generation lock)
+  if (abGenerating) {
+    await cancelAudiobook();
+  }
+
   isPlaying = true;
   updatePlayBtn();
   generateAndPlaySegment(currentChapter, currentSegment);
 }
 
-function pausePlayback() {
+async function pausePlayback() {
   isPlaying = false;
-  // Tell backend to stop GPU inference immediately
-  fetch('/cancel_chapter', { method: 'POST' }).catch(() => {});
+  updatePlayBtn();
+
+  // Abort the ongoing fetch request first
   if (abortController) abortController.abort();
+
+  // Cancel scheduled audio immediately
   cancelScheduledAudio();
   stopHighlightTracker();
-  updatePlayBtn();
+
+  // Wait for backend to finish cleanup and release the generation lock
+  try {
+    await fetch('/cancel_chapter', { method: 'POST' });
+  } catch (e) {
+    console.error('Error cancelling chapter:', e);
+  }
 }
 
-function stopPlayback() {
+async function stopPlayback() {
   isPlaying = false;
-  // Tell backend to stop GPU inference immediately
-  fetch('/cancel_chapter', { method: 'POST' }).catch(() => {});
+  updatePlayBtn();
+
+  // Abort the ongoing fetch request first
   if (abortController) abortController.abort();
+
+  // Cancel scheduled audio immediately
   cancelScheduledAudio();
   stopHighlightTracker();
+
+  // Wait for backend to finish cleanup and release the generation lock
+  try {
+    await fetch('/cancel_chapter', { method: 'POST' });
+  } catch (e) {
+    console.error('Error cancelling chapter:', e);
+  }
+
+  // Reset to beginning
   currentSegment = 0;
-  updatePlayBtn();
   updateProgress();
+
   // Clear highlights
   document.querySelectorAll('.segment').forEach(el => {
     el.classList.remove('playing', 'played');
@@ -1550,6 +1578,11 @@ async function startAudiobook() {
   const selectedChapters = getSelectedChapterIndices();
   if (selectedChapters.length === 0) return;
 
+  // Stop any ongoing playback first (both use the same generation lock)
+  if (isPlaying) {
+    await pausePlayback();
+  }
+
   abGenerating = true;
   document.getElementById('abStartBtn').style.display = 'none';
   document.getElementById('abCancelBtn').style.display = '';
@@ -1660,10 +1693,15 @@ function abDone() {
 }
 
 async function cancelAudiobook() {
+  // Abort the ongoing fetch request first
+  if (abAbort) abAbort.abort();
+
+  // Wait for backend to finish cleanup and release the generation lock
   try {
     await fetch('/cancel_audiobook', { method: 'POST' });
-  } catch(e) {}
-  if (abAbort) abAbort.abort();
+  } catch (e) {
+    console.error('Error cancelling audiobook:', e);
+  }
 }
 
 // ── Voice Manager ──────────────────────────────────────────────────────────────
